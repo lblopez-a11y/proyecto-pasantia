@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistema de Coincidencia de Productos</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 20px; background-color: #f8f9fa; }
+        input { width: 100%; padding: 12px; font-size: 16px; margin-bottom: 20px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px; }
+        .card { border: 1px solid #ddd; background: white; padding: 20px; margin-bottom: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .box-externo { margin-top: 15px; background: #eef2f7; padding: 15px; border-radius: 6px; border-left: 4px solid #007bff; }
+        .btn-container { margin-top: 15px; display: flex; gap: 10px; }
+        button { padding: 8px 12px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; }
+        .btn-si { background-color: #28a745; color: white; }
+        .btn-no { background-color: #dc3545; color: white; }
+        .btn-scrape { background-color: #007bff; color: white; margin-top: 10px; }
+        
+        /* Estilo para el nuevo botón de enlace oficial */
+        .btn-enlace-oficial {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 8px 14px;
+            background-color: #17a2b8;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        .btn-enlace-oficial:hover {
+            background-color: #138496;
+        }
+
+        .mensaje { font-size: 12px; color: #555; margin-top: 5px; }
+        .badge { background: #e2e3e5; padding: 3px 8px; border-radius: 4px; font-size: 12px; }
+
+        /* Estilos para el texto de la IA */
+        .info-texto {
+            font-size: 0.95rem;
+            color: #333;
+            line-height: 1.5;
+            white-space: pre-line; /* Mantiene los saltos de línea naturales */
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Sistema de Coincidencia de Productos</h2>
+    <input type="text" id="buscar" placeholder="Ingresá ID o modelo de producto..." oninput="buscarProductos()">
+
+    <div id="resultados"></div>
+
+    <script>
+        async function buscarProductos() {
+            const query = document.getElementById('buscar').value.trim();
+            const cont = document.getElementById('resultados');
+            
+            if (!query) { cont.innerHTML = ''; return; }
+
+            try {
+                const res = await fetch(`/api/buscar?q=${encodeURIComponent(query)}`);
+                const productos = await res.json();
+
+                cont.innerHTML = productos.map(p => {
+                    const nombreLimpio = p.producto.replace(/'/g, "\\'");
+                    return `
+                    <div class="card" id="card-${p.id}">
+                        <span class="badge">Local DB</span>
+                        <h3>${p.producto}</h3>
+                        <p><strong>ID / Código:</strong> ${p.id}</p>
+
+                        <button class="btn-scrape" onclick="consultarWebExterna('${p.id}', '${nombreLimpio}')">💡 ¿Para qué sirve?</button>
+                        
+                        <div id="externo-${p.id}"></div>
+
+                        <hr style="margin-top: 15px; border: 0; border-top: 1px solid #eee;">
+                        <p style="font-size: 14px; color: #666;">¿La información coincide correctamente?</p>
+                        <div class="btn-container">
+                            <button class="btn-si" onclick="votar(${p.id}, true)">Sí, es correcto</button>
+                            <button class="btn-no" onclick="votar(${p.id}, false)">No es correcto</button>
+                        </div>
+                        <div class="mensaje" id="msg-${p.id}"></div>
+                    </div>
+                `}).join('');
+            } catch (err) {
+                console.error("Error al buscar productos:", err);
+            }
+        }
+
+        async function consultarWebExterna(id, nombre) {
+            const contenedor = document.getElementById(`externo-${id}`);
+            contenedor.innerHTML = '<p style="color: #007bff; margin-top: 10px;">🤖 Analizando función del producto con IA...</p>';
+
+            try {
+                const res = await fetch(`/api/scrapear?id=${encodeURIComponent(id)}&nombre=${encodeURIComponent(nombre)}`);
+                const data = await res.json();
+
+                if (data.exito) {
+                    contenedor.innerHTML = `
+                        <div class="box-externo">
+                            <div class="info-texto">${data.descripcion}</div>
+                            ${data.enlaceOficial ? `<br><a href="${data.enlaceOficial}" target="_blank" class="btn-enlace-oficial">🔗 Ver producto en sitio oficial</a>` : ''}
+                        </div>
+                    `;
+                } else {
+                    contenedor.innerHTML = `<p style="color: #dc3545; margin-top: 10px;">⚠️ No se pudo obtener la información.</p>`;
+                }
+            } catch (err) {
+                contenedor.innerHTML = `<p style="color: #dc3545; margin-top: 10px;">Error al conectar con el servidor.</p>`;
+            }
+        }
+
+        async function votar(id, esCorrecto) {
+            await fetch('/api/votar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id_producto: id, es_correcto: esCorrecto })
+            });
+            document.getElementById(`msg-${id}`).innerText = '✅ Respuesta registrada en la BD';
+        }
+    </script>
+</body>
+</html>
